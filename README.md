@@ -17,14 +17,14 @@ Drag one or more Excel backups onto `Clean Ranpak Invoices.bat`, or:
 python ranpak_clean.py 90210494.xlsx [more.xlsx ...] [-o upload.txt]
 ```
 
-Multiple invoices are combined into one file. Requires `openpyxl` (and `pypdf` for the PDF check).
+Multiple invoices are combined into one file. Requires `openpyxl`, `pypdf` (PDF check) and `pyodbc` (A+ check, Windows login with read access to DWStage on SQL03). `--skip-aplus` turns the A+ check off.
 
 ## Checks
 
 - **Stops, writes nothing:** layout changed, not "User fee billing", non-numeric amount, billed line without a ship date, or a total that doesn't match the invoice PDF ("Final amount") sitting in the same folder.
 - **Writes, but warns:** duplicate serial # across invoices, pre-2022 machine with no Old Serial#, missing serial #, a field containing a line break or tab.
+- **A+ serial check (warns):** each serial is looked up the way the import does it (`aplus_check.py`): Item Master manufacturer item # (`ITMST.IMMFNO`), then Open Order Detail (`ORDET`) for the customer, or Item Balance (`ITBAL`) with on-hand 1 / allocated 0 for a warehouse. Flags serials the import would reject ("No Customer Number found") and serials that resolve to more than one place, since the import takes the first row with no ORDER BY.
 
 ## Not yet
 
-- Pre-check serial numbers against A+ before upload (waiting on which table/field the import matches on).
 - Pull the Excel attachments straight from the invoice emails.

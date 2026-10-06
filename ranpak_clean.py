@@ -8,6 +8,7 @@ Automates Rhea's manual steps:
 
 Several invoices can be combined into one upload. If the invoice PDF sits next
 to the Excel file (same invoice number), the cleaned total is checked against it.
+Serial numbers are looked up in A+ the same way the import does (see aplus_check.py).
 
 Usage:
     python ranpak_clean.py 90210494.xlsx [more.xlsx ...] [-o upload.txt]
@@ -150,6 +151,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+", type=Path, help="Ranpak Excel backup file(s)")
     ap.add_argument("-o", "--output", type=Path, help="output .txt (default: next to the first file)")
+    ap.add_argument("--skip-aplus", action="store_true", help="don't check serial numbers against A+")
     args = ap.parse_args(argv)
 
     invoices, problems = [], []
@@ -172,6 +174,17 @@ def main(argv=None):
             if sn and sn in seen:
                 dupes.append(f"Serial# {sn} appears on both {seen[sn]} and {inv['invoice']}")
             seen.setdefault(sn, inv["invoice"])
+
+    # Look each serial up the way the A+ import will, so problems show up before upload
+    # instead of on the error report afterwards.
+    aplus_warnings = []
+    if not args.skip_aplus:
+        try:
+            from aplus_check import check_serials
+            for sn, problem in check_serials(seen).items():
+                aplus_warnings.append(f"Serial# {sn} ({seen[sn]}): {problem}")
+        except Exception as e:
+            aplus_warnings.append(f"couldn't check serial numbers against A+ ({e}) - the A+ error report is the only check")
 
     if args.output:
         out = args.output
@@ -211,7 +224,7 @@ def main(argv=None):
         f.write("\r\n".join(text_lines) + "\r\n")
     print(f"\nWrote {out}")
 
-    warnings = [w for inv in invoices for w in inv["warnings"]] + dupes
+    warnings = [w for inv in invoices for w in inv["warnings"]] + dupes + aplus_warnings
     if warnings:
         print("\nCHECK BEFORE UPLOADING:")
         for w in warnings:
