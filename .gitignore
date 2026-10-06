@@ -1,0 +1,7 @@
+# Invoice data (customer + bank details) never goes in the repo
+*.xlsx
+*.xls
+*.pdf
+*.PDF
+*.txt
+__pycache__/
