@@ -24,9 +24,16 @@ Multiple invoices are combined into one file. Requires `openpyxl`, `pypdf` (PDF 
 Alongside the upload `.txt`, the tool writes `ranpak_orders_<name>.txt`, the single order file agreed with Trey (2026-10-07) for a new Delta map into ZORHOF/ZORDOF/ZAOPRO. That map removes the manual offline order entry run. Pipe-delimited, CRLF, no header, one line per machine, grouped by order:
 
 ```
+META|created|file|invoices|lines|orders|total|first_rp|last_rp|created_by|computer|tool_version
 order_number|customer|ship_to|line_seq|item|description|serial|amount|invoice_number
+```
+
+```
+META|2026-10-07 12:50:36|ranpak_orders_90210494.txt|90210494|211|33|7599.00|RP001|RP033|lukasn|ILM-LUKASN-LT1|422062c
 RP001|213082|2|1|EQPRANUSER|STANDARD FILLPAK CONVERTER|11416700|20.00|90210494
 ```
+
+The first line is always the `META` line (added at Trey's request, for troubleshooting). Invoices are comma-separated when several are combined. Every other line is an order line.
 
 - The customer lookup is the same as the current "Ranpak_Invoice to Ranpak_Order" map: an open order (`ORDET`) first, otherwise warehouse stock mapped to the branch's internal customer (e.g. 03 -> 33).
 - One order per customer/ship-to, numbered `RP001`-`RP999` fresh each run, skipping any RP number still in live `ZORHOF`/`ZAOPRO` (a stuck order).

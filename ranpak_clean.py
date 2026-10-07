@@ -160,6 +160,26 @@ def parse_overrides(values):
     return overrides
 
 
+def metadata_line(invoices, path, line_count, orders):
+    """First line of the order file, for troubleshooting (Trey, 2026-10-07).
+
+    META|created|file|invoices|lines|orders|total|first RP|last RP|created by|computer|tool version
+    """
+    import getpass
+    import platform
+    import subprocess
+    try:
+        version = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).parent,
+                                 capture_output=True, text=True, timeout=5).stdout.strip() or "unknown"
+    except Exception:
+        version = "unknown"
+    fields = ["META", f"{dt.datetime.now():%Y-%m-%d %H:%M:%S}", path.name,
+              ",".join(inv["invoice"] for inv in invoices), str(line_count), str(len(orders)),
+              f"{sum(o[4] for o in orders):.2f}", orders[0][0] if orders else "", orders[-1][0] if orders else "",
+              getpass.getuser(), platform.node(), version]
+    return "|".join(f.replace("|", " ") for f in fields)
+
+
 def write_order_file(invoices, path, overrides):
     """Write the single pipe-delimited order file for the ZORHOF/ZORDOF map; return warnings."""
     from order_file import build_order_lines, used_rp_numbers
@@ -169,8 +189,9 @@ def write_order_file(invoices, path, overrides):
               "amount": l["amount"]}
              for inv in invoices for l in inv["lines"]]
     text, orders, unmatched = build_order_lines(lines, used_rp_numbers(), overrides)
+    meta = metadata_line(invoices, path, len(text), orders)
     with open(path, "w", encoding="cp1252", newline="") as f:
-        f.write("\r\n".join(text) + "\r\n")
+        f.write("\r\n".join([meta] + text) + "\r\n")
     print(f"Wrote {path} ({len(orders)} orders, {orders[0][0]}-{orders[-1][0]})" if orders else f"Wrote {path} (no orders)")
     return [f"Serial# {l['serial']} ({l['invoice']}): no customer found - left out of the order file" for l in unmatched]
 
