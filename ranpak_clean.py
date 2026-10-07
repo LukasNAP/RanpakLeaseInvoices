@@ -9,6 +9,8 @@ Automates Rhea's manual steps:
 Several invoices can be combined into one upload. If the invoice PDF sits next
 to the Excel file (same invoice number), the cleaned total is checked against it.
 Serial numbers are looked up in A+ the same way the import does (see aplus_check.py).
+It also writes ranpak_orders_<name>.txt, the single order file for the new
+ZORHOF/ZORDOF map (see order_file.py).
 
 Usage:
     python ranpak_clean.py 90210494.xlsx [more.xlsx ...] [-o upload.txt]
@@ -147,14 +149,47 @@ def pdf_total(xlsx_path, invoice_no):
     return candidates[0], float(m.group(1).replace(",", ""))
 
 
+def parse_overrides(values):
+    overrides = {}
+    for v in values:
+        sn, sep, target = v.partition("=")
+        cust, dash, shipto = target.rpartition("-")
+        if not sep or not dash or not sn.strip() or not cust.strip() or not shipto.strip():
+            raise InvoiceError(f"--override '{v}' should look like SERIAL=CUSTOMER-SHIPTO, e.g. 10007655=501113-1")
+        overrides[sn.strip()] = (cust.strip(), shipto.strip())
+    return overrides
+
+
+def write_order_file(invoices, path, overrides):
+    """Write the single pipe-delimited order file for the ZORHOF/ZORDOF map; return warnings."""
+    from order_file import build_order_lines, used_rp_numbers
+    lines = [{"invoice": inv["invoice"],
+              "serial": fmt(l["row"][COL["Serial#"]]).strip(),
+              "description": str(l["row"][COL["Item Description"]] or "").strip(),
+              "amount": l["amount"]}
+             for inv in invoices for l in inv["lines"]]
+    text, orders, unmatched = build_order_lines(lines, used_rp_numbers(), overrides)
+    with open(path, "w", encoding="cp1252", newline="") as f:
+        f.write("\r\n".join(text) + "\r\n")
+    print(f"Wrote {path} ({len(orders)} orders, {orders[0][0]}-{orders[-1][0]})" if orders else f"Wrote {path} (no orders)")
+    return [f"Serial# {l['serial']} ({l['invoice']}): no customer found - left out of the order file" for l in unmatched]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+", type=Path, help="Ranpak Excel backup file(s)")
     ap.add_argument("-o", "--output", type=Path, help="output .txt (default: next to the first file)")
-    ap.add_argument("--skip-aplus", action="store_true", help="don't check serial numbers against A+")
+    ap.add_argument("--skip-aplus", action="store_true",
+                    help="don't check serial numbers against A+ (also skips the order file)")
+    ap.add_argument("--override", action="append", default=[], metavar="SERIAL=CUSTOMER-SHIPTO",
+                    help="bill a serial to this customer/ship-to in the order file (e.g. 10007655=501113-1)")
     args = ap.parse_args(argv)
 
     invoices, problems = [], []
+    try:
+        overrides = parse_overrides(args.override)
+    except InvoiceError as e:
+        problems.append(str(e))
     for path in args.files:
         try:
             invoices.append(read_invoice(path))
@@ -182,6 +217,8 @@ def main(argv=None):
         try:
             from aplus_check import check_serials
             for sn, problem in check_serials(seen).items():
+                if sn in overrides:
+                    problem = f"overridden to {'-'.join(overrides[sn])} (A+ lookup: {problem})"
                 aplus_warnings.append(f"Serial# {sn} ({seen[sn]}): {problem}")
         except Exception as e:
             aplus_warnings.append(f"couldn't check serial numbers against A+ ({e}) - the A+ error report is the only check")
@@ -224,7 +261,16 @@ def main(argv=None):
         f.write("\r\n".join(text_lines) + "\r\n")
     print(f"\nWrote {out}")
 
-    warnings = [w for inv in invoices for w in inv["warnings"]] + dupes + aplus_warnings
+    # The order file for the new ZORHOF/ZORDOF map. It needs A+ for the customer lookup
+    # and the RP number check, so it's skipped along with the A+ check.
+    order_warnings = []
+    if not args.skip_aplus:
+        try:
+            order_warnings = write_order_file(invoices, out.with_name(f"ranpak_orders_{out.stem}.txt"), overrides)
+        except Exception as e:
+            order_warnings.append(f"couldn't build the order file ({e})")
+
+    warnings = [w for inv in invoices for w in inv["warnings"]] + dupes + aplus_warnings + order_warnings
     if warnings:
         print("\nCHECK BEFORE UPLOADING:")
         for w in warnings:
