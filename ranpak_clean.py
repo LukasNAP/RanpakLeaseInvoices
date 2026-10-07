@@ -9,7 +9,7 @@ Automates Rhea's manual steps:
 Several invoices can be combined into one upload. If the invoice PDF sits next
 to the Excel file (same invoice number), the cleaned total is checked against it.
 Serial numbers are looked up in A+ the same way the import does (see aplus_check.py).
-It also writes ranpak_orders_<name>.txt, the single order file for the new
+It also writes Ranpak_Invoice_<invoice>_<timestamp>.txt, the single order file for the new
 ZORHOF/ZORDOF map (see order_file.py).
 
 Usage:
@@ -160,28 +160,22 @@ def parse_overrides(values):
     return overrides
 
 
-def metadata_line(invoices, path, line_count, orders):
-    """First line of the order file, for troubleshooting (Trey, 2026-10-07).
+# Layout agreed with Trey (2026-10-07): the run details (who, where, when) are
+# repeated on every line so each record has the same fields, and the invoice
+# number and timestamp are also in the file name.
+ORDER_FILE_HEADER = ("order_number|customer|ship_to|line_seq|item|description|serial|amount|invoice_number"
+                     "|UserAccount|SourceComputer|Timestamp")
 
-    META|created|file|invoices|lines|orders|total|first RP|last RP|created by|computer|tool version
-    """
+
+def order_file_path(folder, invoices, stamp):
+    """Ranpak_Invoice_<InvoiceNumber>_<TimeStamp>.txt; combined invoices are joined with '-'."""
+    return folder / f"Ranpak_Invoice_{'-'.join(inv['invoice'] for inv in invoices)}_{stamp}.txt"
+
+
+def write_order_file(invoices, folder, overrides):
+    """Write the single pipe-delimited order file for the ZORHOF/ZORDOF map; return warnings."""
     import getpass
     import platform
-    import subprocess
-    try:
-        version = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).parent,
-                                 capture_output=True, text=True, timeout=5).stdout.strip() or "unknown"
-    except Exception:
-        version = "unknown"
-    fields = ["META", f"{dt.datetime.now():%Y-%m-%d %H:%M:%S}", path.name,
-              ",".join(inv["invoice"] for inv in invoices), str(line_count), str(len(orders)),
-              f"{sum(o[4] for o in orders):.2f}", orders[0][0] if orders else "", orders[-1][0] if orders else "",
-              getpass.getuser(), platform.node(), version]
-    return "|".join(f.replace("|", " ") for f in fields)
-
-
-def write_order_file(invoices, path, overrides):
-    """Write the single pipe-delimited order file for the ZORHOF/ZORDOF map; return warnings."""
     from order_file import build_order_lines, used_rp_numbers
     lines = [{"invoice": inv["invoice"],
               "serial": fmt(l["row"][COL["Serial#"]]).strip(),
@@ -189,9 +183,11 @@ def write_order_file(invoices, path, overrides):
               "amount": l["amount"]}
              for inv in invoices for l in inv["lines"]]
     text, orders, unmatched = build_order_lines(lines, used_rp_numbers(), overrides)
-    meta = metadata_line(invoices, path, len(text), orders)
+    stamp = f"{dt.datetime.now():%Y%m%d%H%M%S}"
+    run = "|".join(v.replace("|", " ") for v in (getpass.getuser(), platform.node(), stamp))
+    path = order_file_path(folder, invoices, stamp)
     with open(path, "w", encoding="cp1252", newline="") as f:
-        f.write("\r\n".join([meta] + text) + "\r\n")
+        f.write("\r\n".join([ORDER_FILE_HEADER] + [f"{t}|{run}" for t in text]) + "\r\n")
     print(f"Wrote {path} ({len(orders)} orders, {orders[0][0]}-{orders[-1][0]})" if orders else f"Wrote {path} (no orders)")
     return [f"Serial# {l['serial']} ({l['invoice']}): no customer found - left out of the order file" for l in unmatched]
 
@@ -287,7 +283,7 @@ def main(argv=None):
     order_warnings = []
     if not args.skip_aplus:
         try:
-            order_warnings = write_order_file(invoices, out.with_name(f"ranpak_orders_{out.stem}.txt"), overrides)
+            order_warnings = write_order_file(invoices, out.parent, overrides)
         except Exception as e:
             order_warnings.append(f"couldn't build the order file ({e})")
 
