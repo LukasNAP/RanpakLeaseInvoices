@@ -21,7 +21,7 @@ Multiple invoices are combined into one file. Requires `openpyxl`, `pypdf` (PDF 
 
 ## Order file (new ZORHOF/ZORDOF map)
 
-Alongside the upload `.txt`, the tool writes `Ranpak_Invoice_<InvoiceNumber>_<TimeStamp>.txt`, the single order file agreed with Trey (2026-10-07) for a new Delta map into ZORHOF/ZORDOF/ZAOPRO. That map removes the manual offline order entry run. Combined invoices are joined with `-` in the name. Pipe-delimited, CRLF, a header line, then one line per machine grouped by order. Who ran it, from which computer, and when are repeated on every line, so every record has the same 12 fields:
+Alongside the upload `.txt`, the tool writes `Ranpak_Invoice_<InvoiceNumber>_<TimeStamp>.txt`, the single order file agreed with Trey (2026-10-07) for a new Delta map into ZORHOF/ZORDOF/ZAOPRO. That map removes the manual offline order entry run. A combined upload is named after its first invoice plus a count, e.g. `Ranpak_Invoice_90210494+19_<TimeStamp>.txt`; every line still has its own invoice number. The timestamp is `yyyyMMddHHmmss`. Pipe-delimited, CRLF, a header line, then one line per machine grouped by order. Who ran it, from which computer, and when are repeated on every line, so every record has the same 12 fields:
 
 ```
 order_number|customer|ship_to|line_seq|item|description|serial|amount|invoice_number|UserAccount|SourceComputer|Timestamp

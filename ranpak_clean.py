@@ -168,8 +168,14 @@ ORDER_FILE_HEADER = ("order_number|customer|ship_to|line_seq|item|description|se
 
 
 def order_file_path(folder, invoices, stamp):
-    """Ranpak_Invoice_<InvoiceNumber>_<TimeStamp>.txt; combined invoices are joined with '-'."""
-    return folder / f"Ranpak_Invoice_{'-'.join(inv['invoice'] for inv in invoices)}_{stamp}.txt"
+    """Ranpak_Invoice_<InvoiceNumber>_<TimeStamp>.txt.
+
+    A combined upload is named after its first invoice plus how many more it holds
+    (e.g. 90210494+19), which keeps the path short; every line still carries its
+    own invoice number.
+    """
+    name = invoices[0]["invoice"] + (f"+{len(invoices) - 1}" if len(invoices) > 1 else "")
+    return folder / f"Ranpak_Invoice_{name}_{stamp}.txt"
 
 
 def write_order_file(invoices, folder, overrides):
